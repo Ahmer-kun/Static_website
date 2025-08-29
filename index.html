@@ -1,0 +1,334 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>LocalStorage Photo Gallery</title>
+  <meta name="description" content="A static site that stores and displays photos using browser localStorage." />
+  <style>
+    :root {
+      --bg: #0b1020;        /* deep navy */
+      --panel: #131a2b;     /* panel */
+      --muted: #2a3553;     /* borders */
+      --text: #e6e9f5;      /* main text */
+      --subtle: #b7bfdd;    /* subtle text */
+      --accent: #7c5cff;    /* purple */
+      --accent-2: #21c39e;  /* teal */
+      --danger: #ff5c7a;    /* coral */
+      --radius: 16px;
+    }
+
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      margin: 0;
+      background: radial-gradient(1200px 800px at 20% -20%, rgba(124,92,255,0.15), transparent 60%),
+                  radial-gradient(900px 700px at 120% 20%, rgba(33,195,158,0.18), transparent 60%),
+                  var(--bg);
+      color: var(--text);
+      font: 16px/1.45 system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji";
+    }
+    .container {
+      max-width: 980px;
+      margin: 32px auto;
+      padding: 0 16px 48px;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .logo {
+      width: 40px; height: 40px; border-radius: 12px;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      display: grid; place-items: center;
+      color: white; font-weight: 800;
+    }
+    h1 { font-size: 20px; margin: 0; }
+    .sub { color: var(--subtle); font-size: 13px; margin-top: 2px; }
+
+    .panel {
+      background: rgba(19,26,43,0.8);
+      backdrop-filter: blur(6px);
+      border: 1px solid var(--muted);
+      border-radius: var(--radius);
+      padding: 16px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.35);
+    }
+
+    .u-row { display: flex; gap: 12px; flex-wrap: wrap; }
+    .spacer { height: 16px; }
+
+    .dropzone {
+      border: 2px dashed rgba(255,255,255,0.18);
+      border-radius: var(--radius);
+      padding: 28px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color .2s ease, background .2s ease;
+      user-select: none;
+    }
+    .dropzone:hover { border-color: var(--accent); }
+    .dropzone.dragover { border-color: var(--accent-2); background: rgba(33,195,158,0.08); }
+
+    .dz-title { font-weight: 700; margin-bottom: 6px; }
+    .dz-hint { color: var(--subtle); font-size: 13px; }
+
+    .btn {
+      appearance: none; border: 1px solid var(--muted); background: #0f1526; color: var(--text);
+      padding: 10px 14px; border-radius: 12px; font-weight: 600; font-size: 14px; cursor: pointer;
+      transition: transform .04s ease, background .2s ease, border-color .2s ease;
+    }
+    .btn:hover { background: #121a2e; border-color: #3b4870; }
+    .btn:active { transform: translateY(1px); }
+    .btn.primary { background: linear-gradient(135deg, rgba(124,92,255,.15), rgba(33,195,158,.15)); border-color: #3f4a77; }
+    .btn.danger { border-color: #633344; background: #2a1120; }
+
+    .stats { color: var(--subtle); font-size: 13px; margin-left: auto; }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: 14px;
+    }
+
+    figure.card {
+      margin: 0; position: relative; overflow: hidden; border-radius: 14px; border: 1px solid var(--muted);
+      background: var(--panel);
+    }
+    .thumb {
+      width: 100%; height: 170px; object-fit: cover; display: block; background: #0e1526;
+    }
+    .card-footer {
+      display: flex; align-items: center; justify-content: space-between; gap: 8px;
+      padding: 10px 10px; border-top: 1px solid rgba(255,255,255,0.06);
+    }
+    .small { font-size: 12px; color: var(--subtle); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+    .empty {
+      text-align: center; padding: 24px; color: var(--subtle);
+      border: 1px dashed rgba(255,255,255,0.18); border-radius: 12px;
+    }
+
+    footer { color: var(--subtle); font-size: 12px; margin-top: 22px; text-align: center; }
+    a { color: #9fc7ff; text-decoration: none; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="brand">
+        <div class="logo" aria-hidden="true">LS</div>
+        <div>
+          <h1>LocalStorage Photo Gallery</h1>
+          <div class="sub">Upload images → stored as Base64 in your browser → persists per domain</div>
+        </div>
+      </div>
+      <div class="u-row">
+        <button id="exportBtn" class="btn">Export JSON</button>
+        <button id="importBtn" class="btn">Import JSON</button>
+        <button id="clearBtn" class="btn danger">Clear All</button>
+      </div>
+    </header>
+
+    <div class="panel">
+      <div id="dropzone" class="dropzone" role="button" tabindex="0" aria-label="Upload images">
+        <div class="dz-title">Drop images here or click to upload</div>
+        <div class="dz-hint">JPG/PNG, compressed on-device. Stored only in <code>localStorage</code>.</div>
+        <input id="fileInput" type="file" accept="image/*" multiple hidden />
+      </div>
+
+      <div class="spacer"></div>
+
+      <div class="u-row">
+        <button id="openPicker" class="btn primary">Add Photos</button>
+        <div class="stats" id="stats">0 photos • 0.00 MB used</div>
+      </div>
+    </div>
+
+    <div class="spacer"></div>
+
+    <div id="gallery" class="grid" aria-live="polite"></div>
+
+    <div id="emptyState" class="empty" style="display:none">No images yet. Add some using the button above.</div>
+
+    <footer>
+      Built as a static site. Deploy to Netlify/Vercel by uploading this single <code>index.html</code>.
+    </footer>
+  </div>
+
+  <script>
+    // ===== Configuration =====
+    const STORAGE_KEY = 'ls-gallery-v1';
+    const MAX_WIDTH = 1280;     // downscale width
+    const JPEG_QUALITY = 0.85;  // export quality
+    const MAX_ITEMS = 48;       // safety cap
+
+    const $ = (id) => document.getElementById(id);
+    const galleryEl = $('gallery');
+    const emptyEl = $('emptyState');
+    const statsEl = $('stats');
+
+    function getGallery() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        return raw ? JSON.parse(raw) : [];
+      } catch(e) {
+        console.warn('Failed to parse gallery from localStorage', e);
+        return [];
+      }
+    }
+
+    function setGallery(arr) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(arr));
+      render();
+    }
+
+    function bytesForString(str) {
+      // rough byte length for UTF-16 to Base64 string; we estimate via Blob for accuracy
+      try { return new Blob([str]).size; } catch { return str.length * 2; }
+    }
+
+    function updateStats(items) {
+      const totalBytes = bytesForString(localStorage.getItem(STORAGE_KEY) || '');
+      const mb = (totalBytes / (1024 * 1024)).toFixed(2);
+      statsEl.textContent = `${items.length} photo${items.length!==1?'s':''} • ${mb} MB used`;
+    }
+
+    function render() {
+      const items = getGallery();
+      galleryEl.innerHTML = '';
+      if (!items.length) {
+        emptyEl.style.display = '';
+      } else {
+        emptyEl.style.display = 'none';
+        for (const item of items) {
+          const fig = document.createElement('figure');
+          fig.className = 'card';
+          const img = document.createElement('img');
+          img.className = 'thumb';
+          img.loading = 'lazy';
+          img.alt = item.name || 'Photo';
+          img.src = item.dataUrl;
+          const footer = document.createElement('div');
+          footer.className = 'card-footer';
+          const cap = document.createElement('div');
+          cap.className = 'small';
+          cap.textContent = item.name || 'Photo';
+          const del = document.createElement('button');
+          del.className = 'btn danger';
+          del.textContent = 'Delete';
+          del.addEventListener('click', () => removeItem(item.id));
+          footer.append(cap, del);
+          fig.append(img, footer);
+          galleryEl.append(fig);
+        }
+      }
+      updateStats(items);
+    }
+
+    function removeItem(id) {
+      const items = getGallery().filter(x => x.id !== id);
+      setGallery(items);
+    }
+
+    async function toJpegDataUrl(file) {
+      const bitmap = await createImageBitmap(file);
+      const scale = Math.min(1, MAX_WIDTH / bitmap.width);
+      const w = Math.round(bitmap.width * scale);
+      const h = Math.round(bitmap.height * scale);
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(bitmap, 0, 0, w, h);
+      const dataUrl = canvas.toDataURL('image/jpeg', JPEG_QUALITY);
+      return dataUrl;
+    }
+
+    async function handleFiles(fileList) {
+      const files = Array.from(fileList).filter(f => f.type.startsWith('image/'));
+      if (!files.length) return;
+      let items = getGallery();
+      for (const f of files) {
+        try {
+          const dataUrl = await toJpegDataUrl(f);
+          const item = { id: `${Date.now()}-${Math.random().toString(36).slice(2)}`, name: f.name, dataUrl };
+          items.unshift(item);
+          if (items.length > MAX_ITEMS) items = items.slice(0, MAX_ITEMS);
+        } catch (e) {
+          console.error('Failed to process', f.name, e);
+        }
+      }
+      setGallery(items);
+    }
+
+    // ===== UI wiring =====
+    const dropzone = $('dropzone');
+    const input = $('fileInput');
+    const openPicker = $('openPicker');
+    const clearBtn = $('clearBtn');
+    const exportBtn = $('exportBtn');
+    const importBtn = $('importBtn');
+
+    dropzone.addEventListener('click', () => input.click());
+    dropzone.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') input.click(); });
+    dropzone.addEventListener('dragover', (e) => { e.preventDefault(); dropzone.classList.add('dragover'); });
+    dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
+    dropzone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropzone.classList.remove('dragover');
+      handleFiles(e.dataTransfer.files);
+    });
+
+    input.addEventListener('change', (e) => handleFiles(e.target.files));
+    openPicker.addEventListener('click', () => input.click());
+
+    clearBtn.addEventListener('click', () => {
+      if (confirm('Clear all photos from localStorage?')) {
+        setGallery([]);
+      }
+    });
+
+    exportBtn.addEventListener('click', () => {
+      const data = localStorage.getItem(STORAGE_KEY) || '[]';
+      const blob = new Blob([data], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = 'gallery-export.json';
+      document.body.appendChild(a); a.click(); a.remove();
+      URL.revokeObjectURL(url);
+    });
+
+    importBtn.addEventListener('click', async () => {
+      const picker = document.createElement('input');
+      picker.type = 'file'; picker.accept = 'application/json';
+      picker.addEventListener('change', () => {
+        const file = picker.files[0]; if (!file) return;
+        const reader = new FileReader();
+        reader.onload = () => {
+          try {
+            const arr = JSON.parse(reader.result);
+            if (Array.isArray(arr)) setGallery(arr);
+            else alert('Invalid JSON format.');
+          } catch {
+            alert('Could not parse JSON.');
+          }
+        };
+        reader.readAsText(file);
+      });
+      picker.click();
+    });
+
+    // Initial render
+    render();
+  </script>
+</body>
+</html>
